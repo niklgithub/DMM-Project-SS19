@@ -48,7 +48,7 @@ int main (void)
 	DDRB = 0x0F;
 	// set PB0-PB3 on high-level
 	PORTB |= 0x0F;		// Required for DMM Board DMM Board 2013
-	
+	/*
 	LCD_Init();
 	UART_Init();
 			
@@ -62,9 +62,31 @@ int main (void)
 	
 	Backlight_Off();
 	LCD_Clear();
-
+*/
+	
+	//activate interrupt on pushing the joystick
+	cli();
+	PCICR |= (1<<PCIE0);
+	PCMSK0 = (1<<PCINT3);
+	sei();
+	
 	// loop forever
-	while(1);
+	while(1)
+	{
+		/*if(PINA&(1<<PINA3))
+		{
+			PORTB &= ~(1<<PINB0);
+		}
+		else
+		{
+			PORTB |= (1<<PINB0);
+		}*/
+	}
+}
+
+ISR (PCINT0_vect)
+{
+	PORTB ^= (1<<PINB0);
 }
 
 void

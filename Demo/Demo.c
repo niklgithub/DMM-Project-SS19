@@ -69,6 +69,7 @@ int main (void)
 	PCICR |= (1<<PCIE0);
 	PCMSK0 = (1<<PCINT3);
 	sei();
+	init_sysclk();
 	
 	// loop forever
 	while(1)
@@ -87,6 +88,21 @@ int main (void)
 ISR (PCINT0_vect)
 {
 	PORTB ^= (1<<PINB0);
+}
+
+ISR (TIMER0_COMPA_vect)
+{
+	//Systemuhr hochzählen
+}
+
+
+void init_sysclk () //sysclk uses Timer0 with output comparision
+{
+	cli();
+	TCCR0B |= ((1<<CS01)|(1<<CS00)); //prescaler 64 (for 16 MHz quarz)
+	OCR0A = 250; //compare to this. (250 for 1 ms)
+	TIMSK0 |= (1<<OCIE0A); //enable interrupt
+	sei();
 }
 
 void

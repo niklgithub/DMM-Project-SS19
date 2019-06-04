@@ -17,6 +17,7 @@
 	LCD_PutChar(0x10); \
 	LCD_Update();      \
 while(((PINA)&0x08));while(!((PINA)&0x08));_delay_ms(20);while(((PINA)&0x08)); }	// Required for DMM Board 2013
+
 //while(PINA&0xf8);while(!(PINA&0x08));_delay_ms(20);while(PINA&0x08);}			// Required for DMM Board 2012 and before
 
 
@@ -32,8 +33,11 @@ const uint8_t PROGMEM emg_logo[640] =
 };
 uint32_t time_sys = 0; //number of milliseconds since µC started
 uint32_t time_syslast = 0; //number of milliseconds since µC started
+uint32_t time_sensorlastnegedge = 0; //Sensing wont work within first time_debounce ms
+uint16_t time_debounce = 1200;
 int8_t flag_sensor = 0; //set on bouncing cycle rotation impulse
 int8_t flag_turn = 0; //set on debounced cycle rotation impulse
+int8_t lock_debounce = 0; //additional locking to debounce until time_sensorlastnegedge is updated
 
 void demo_backlight (void);
 void demo_start (void);
@@ -46,9 +50,7 @@ void demo_music (void);
 int main (void)
 {
 	//local variables
-	static uint32_t time_lastdet = 0; //time of last sensor detection in ms for debouncing
-	static uint8_t time_debounce = 25; //blocking time to prevent bouncing
-	
+	uint32_t time_syssec = 0;	
 	// set PA3-PA7 as input and activated internal Pull-Up
 	DDRA &= ~((1<<PINA3)|(1<<PINA4)|(1<<PINA5)|(1<<PINA6)|(1<<PINA7));		// Required for DMM Board 2013
 	PORTA |= ((1<<PINA3)|(1<<PINA4)|(1<<PINA5)|(1<<PINA6)|(1<<PINA7));		// Required for DMM Board 2013
@@ -83,33 +85,27 @@ int main (void)
 	//++++++++++++++++++++++++++++++++++++ LOOP +++++++++++++++++++++++++++++++++++++
 	while(1)
 	{
-		if (flag_sensor) //debouncing the sensor input
+		if((time_sys - (1000*time_syssec))>= 1000) 
 		{
-			if (time_sys > (time_lastdet + time_debounce))
-			{
-				flag_turn = 1;
-			}
-			
-			time_lastdet = time_sys;
-			flag_sensor = 0;
+			time_syssec++;
+			PORTB ^= (1<<PINB0);
 		}
 		
-		/*if(!(time_sys % 1000)) 
-		{
-			PORTB ^= (1<<PINB0);
-		}*/
 		
-		if(time_sys > 1000)
-		{
-			time_sys = 0;
-			PORTB ^= (1<<PINB0);
-
-		}
 		
 		if (flag_turn)
 		{
 			PORTB ^= (1<<PINB3);
 			flag_turn = 0;
+		}
+		
+		if(time_sys > (time_debounce + time_sensorlastnegedge))
+		{
+			PORTB |= (1<<PINB2);
+		}
+		else
+		{
+			PORTB &= ~(1<<PINB2);
 		}
 			
 		/*if(PINA&(1<<PINA3))
@@ -129,7 +125,19 @@ int main (void)
 
 ISR (PCINT0_vect)
 {
-	flag_sensor |= !(PINA & (1<<PINA3)); //check whether PA3 is high or low, interrupt is on every pinchange, dont delete
+	if((PINA & (1<<PINA3))) //Magnet has left reed-contact
+	{
+		time_sensorlastnegedge = time_sys;
+		lock_debounce = 0;
+	}
+	else if (!(PINA & (1<<PINA3))) //Magnet has moved into range of reed-contact
+	{
+		if ((time_sys > (time_sensorlastnegedge + time_debounce)) && (lock_debounce == 0)) //debouncing filter
+		{
+			flag_turn = 1;
+			lock_debounce = 1;
+		}
+	}
 }
 
 ISR (TIMER0_COMPA_vect)

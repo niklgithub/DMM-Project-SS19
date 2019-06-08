@@ -34,10 +34,12 @@ const uint8_t PROGMEM emg_logo[640] =
 uint32_t time_sys = 0; //number of milliseconds since µC started
 uint32_t time_syslast = 0; //number of milliseconds since µC started
 uint32_t time_sensorlastnegedge = 0; //Sensing wont work within first time_debounce ms
-uint16_t time_debounce = 1200;
-int8_t flag_sensor = 0; //set on bouncing cycle rotation impulse
+uint32_t time_lasthigh = 0;
+uint16_t time_debounce = 50;
+int8_t flag_pcint = 0; //set on bouncing cycle rotation impulse
 int8_t flag_turn = 0; //set on debounced cycle rotation impulse
 int8_t lock_debounce = 0; //additional locking to debounce until time_sensorlastnegedge is updated
+int8_t flag_time = 0; //to count time_sys in main function
 
 void demo_backlight (void);
 void demo_start (void);
@@ -51,6 +53,7 @@ int main (void)
 {
 	//local variables
 	uint32_t time_syssec = 0;	
+	int8_t state_sensor = -1; 
 	// set PA3-PA7 as input and activated internal Pull-Up
 	DDRA &= ~((1<<PINA3)|(1<<PINA4)|(1<<PINA5)|(1<<PINA6)|(1<<PINA7));		// Required for DMM Board 2013
 	PORTA |= ((1<<PINA3)|(1<<PINA4)|(1<<PINA5)|(1<<PINA6)|(1<<PINA7));		// Required for DMM Board 2013
@@ -76,12 +79,8 @@ int main (void)
 	*/
 	
 	//++++++++++++++++++++++++++++++++++++ SETUP ++++++++++++++++++++++++++++++++++++
-	cli();
-	PCICR |= (1<<PCIE0); //enable interrupt on pinchange
-	PCMSK0 = (1<<PCINT3); //mask for port pin PA3
-	sei();
+	init_pcint();
 	init_sysclk();
-	
 	//++++++++++++++++++++++++++++++++++++ LOOP +++++++++++++++++++++++++++++++++++++
 	while(1)
 	{
@@ -92,6 +91,17 @@ int main (void)
 		}
 		
 		
+		state_sensor = !(PINA & (1<<PINA3)); //inverted because of pull-up on PA3. state_sensor == 1 means magnet is near reed contact
+		if(flag_pcint || (state_sensor == 1))
+		{
+			if(time_sys > time_lasthigh + time_debounce)
+			{
+				flag_turn = 1;
+			}
+			time_lasthigh = time_sys;
+			flag_pcint = 0;
+		}
+		
 		
 		if (flag_turn)
 		{
@@ -99,14 +109,14 @@ int main (void)
 			flag_turn = 0;
 		}
 		
-		if(time_sys > (time_debounce + time_sensorlastnegedge))
+		/*if(time_sys > (time_debounce + time_sensorlastnegedge))
 		{
 			PORTB |= (1<<PINB2);
 		}
 		else
 		{
 			PORTB &= ~(1<<PINB2);
-		}
+		}*/
 			
 		/*if(PINA&(1<<PINA3))
 		{
@@ -120,12 +130,21 @@ int main (void)
 		{
 		}
 		time_syslast = time_sys;*/
+		
+		
+		/*Dont write main-code after following block!*/
+		do //to realise 1 ms system period
+		{
+		} while (flag_time==0);
+		time_sys += flag_time; // checking if flag_time > 1 would mean main takes too much time
+		flag_time = 0;
 	}
 }
 
 ISR (PCINT0_vect)
 {
-	if((PINA & (1<<PINA3))) //Magnet has left reed-contact
+	flag_pcint = 1;
+	/*if((PINA & (1<<PINA3))) //Magnet has left reed-contact
 	{
 		time_sensorlastnegedge = time_sys;
 		lock_debounce = 0;
@@ -137,16 +156,23 @@ ISR (PCINT0_vect)
 			flag_turn = 1;
 			lock_debounce = 1;
 		}
-	}
+	}*/
 }
 
 ISR (TIMER0_COMPA_vect)
 {
-	time_sys++; //count ms since µC started
+	//time_sys++; //count ms since µC started
+	flag_time++;
 }
 
-
-void init_sysclk () //sysclk uses Timer0 with output comparision
+void init_pcint (void)
+{
+	cli();
+	PCICR |= (1<<PCIE0); //enable interrupt on pinchange
+	PCMSK0 = (1<<PCINT3); //mask for port pin PA3
+	sei();
+}
+void init_sysclk (void) //sysclk uses Timer0 with output comparision
 {
 	cli();
 	TCCR0B |= ((1<<CS01)|(1<<CS00)); //prescaler 64 (for 16 MHz quarz)

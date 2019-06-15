@@ -40,6 +40,13 @@ int8_t flag_pcint = 0; //set on bouncing cycle rotation impulse
 int8_t flag_turn = 0; //set on debounced cycle rotation impulse
 int8_t lock_debounce = 0; //additional locking to debounce until time_sensorlastnegedge is updated
 int8_t flag_time = 0; //to count time_sys in main function
+uint16_t size_wheel = 2215; //wheels circumference in mm
+uint32_t time_measarray[5] = {0};
+uint8_t flag_measarray[5] = {0};
+uint8_t speed_threshold = 1; // in m/s. Lower speeds ain't used for calculations
+double speed_current = 0; //speed from time 2 samples before
+double acc_current = 0; //acceleration from time 2 samples before
+
 
 void demo_backlight (void);
 void demo_start (void);
@@ -106,6 +113,26 @@ int main (void)
 		if (flag_turn)
 		{
 			PORTB ^= (1<<PINB3);
+			
+			time_measarray[0] = time_measarray[1];
+			time_measarray[1] = time_measarray[2];
+			time_measarray[2] = time_measarray[3];
+			time_measarray[3] = time_measarray[4];
+			time_measarray[4] = time_sys;
+				
+			flag_measarray[0] = 1;	
+			flag_measarray[1] = flag_measarray[2];
+			flag_measarray[2] = flag_measarray[3];
+			flag_measarray[3] = flag_measarray[4];
+			flag_measarray[4] = (((double) (size_wheel/(time_measarray[4]-time_measarray[3]))) >= speed_threshold)
+			
+			if (flag_measarray[0] && flag_measarray[1] && flag_measarray[2] && flag_measarray[3] && flag_measarray[4])
+			{
+				//differentiation based on method of central difference
+				speed_current = 2*size_wheel/(time_measarray[3]-time_measarray[1]); //speed in mm/ms = m/s
+				acc_current = 2*1000*size_wheel*(((1/(time_measarray[4]-time_measarray[2]))-(1/(time_measarray[2]-time_measarray[0])))/(time_measarray[3]-time_measarray[1])); //acceleration in 1000mm/(ms)²=m/s²
+			}
+			
 			flag_turn = 0;
 		}
 		

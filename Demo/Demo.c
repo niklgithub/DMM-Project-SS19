@@ -44,8 +44,9 @@ uint16_t size_wheel = 2215; //wheels circumference in mm
 uint32_t time_measarray[5] = {0};
 uint8_t flag_measarray[5] = {0};
 uint8_t speed_threshold = 1; // in m/s. Lower speeds ain't used for calculations
-uint8_t speed_table[250] = {0}; //8-bit representation: 0 -> 0 km/h; 255 -> (255*0.2) = 51 km/h
-uint8_t power_table[250] = {0}; //8-bit representation: 0 -> 0 W; 255 -> (255*2) = 510 W
+const uint8_t length_table = 250;
+uint8_t speed_table[length_table] = {0}; //8-bit representation: 0 -> 0 km/h; 255 -> (255*0.2) = 51 km/h
+uint8_t power_table[length_table] = {0}; //8-bit representation: 0 -> 0 W; 255 -> (255*2) = 510 W
 double speed_current = 0; //speed from time 2 samples before
 double acc_current = 0; //acceleration from time 2 samples before
 double power_current = 0; //power in W from time 2 samples before
@@ -143,6 +144,10 @@ int main (void)
 					store_table (speed_current , power_current);
 				}
 				
+				else
+				{
+					calc_power (speed_current , acc_current);
+				}
 			}
 			
 			
@@ -221,7 +226,7 @@ void init_sysclk (void) //sysclk uses Timer0 with output comparision
 	sei();
 }
 
-void store_table (double speed, double power)
+void store_table (double speed, double power) //to do: overflow check for speed and power
 {
 	static uint8_t speed_last = 255;
 	static uint8_t i = 0;
@@ -235,11 +240,20 @@ void store_table (double speed, double power)
 	
 	if (speed_int < speed_last) //store new speed-power-point only if speed is lower than before
 	{
-		speed_table[i] = speed_last;
+		speed_table[i] = speed_int;
 		power_table[i] = power_int;
 		speed_last = speed_int;
-		i++;
+		
+		if (i < length_table) //prevent overflow of i
+		{
+			i++;
+		}
 	}
+}
+
+void calc_power (double speed, double acceleration)
+{
+	
 }
 
 void

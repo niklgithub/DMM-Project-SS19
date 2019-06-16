@@ -114,9 +114,10 @@ int main (void)
 		}
 		
 		
-		if (flag_turn)
+		if (flag_turn) //to do: add switch to activate storing a new curve
 		{
 			PORTB ^= (1<<PINB3);
+			
 			
 			time_measarray[0] = time_measarray[1];
 			time_measarray[1] = time_measarray[2];
@@ -136,7 +137,14 @@ int main (void)
 				speed_current = 2*size_wheel/(time_measarray[3]-time_measarray[1]); //speed in mm/ms = m/s
 				acc_current = 2*1000*size_wheel*(((1/(time_measarray[4]-time_measarray[2]))-(1/(time_measarray[2]-time_measarray[0])))/(time_measarray[3]-time_measarray[1])); //acceleration in 1000mm/(ms)²=m/s²
 				power_current = (-1) * mass_eff * speed_current * acc_current; //power in W
+				
+				if (flag_store)
+				{
+					store_table (speed_current , power_current);
+				}
+				
 			}
+			
 			
 			flag_turn = 0;
 		}
@@ -211,6 +219,27 @@ void init_sysclk (void) //sysclk uses Timer0 with output comparision
 	OCR0A = 250; //compare to this. (250 for 1 ms)
 	TIMSK0 |= (1<<OCIE0A); //enable interrupt
 	sei();
+}
+
+void store_table (double speed, double power)
+{
+	static uint8_t speed_last = 255;
+	static uint8_t i = 0;
+	uint8_t speed_int = 0;
+	uint8_t power_int = 0;
+	
+	speed = speed * (3.6 * 5) //convert speed from m/s to 0.5-km/h, 255 => 51 km/h
+	speed_int = (int) speed;
+	power = 0.5 * power; //convert power from W to 2-W; 255 => 510 W
+	power_int = (int) power;
+	
+	if (speed_int < speed_last) //store new speed-power-point only if speed is lower than before
+	{
+		speed_table[i] = speed_last;
+		power_table[i] = power_int;
+		speed_last = speed_int;
+		i++;
+	}
 }
 
 void

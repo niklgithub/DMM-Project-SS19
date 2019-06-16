@@ -50,7 +50,8 @@ uint8_t power_table[length_table] = {0}; //8-bit representation: 0 -> 0 W; 255 -
 double speed_current = 0; //speed from time 2 samples before
 double acc_current = 0; //acceleration from time 2 samples before
 double power_current = 0; //power in W from time 2 samples before
-float mass_eff = 80; //total effective mass in kg: bike + rider + transformed inertia torque 
+double mass_eff = 80; //total effective mass in kg: bike + rider + transformed inertia torque 
+double power_calc = 0; //power calculated by interpolation of measured curve
 
 
 void demo_backlight (void);
@@ -130,8 +131,15 @@ int main (void)
 			flag_measarray[1] = flag_measarray[2];
 			flag_measarray[2] = flag_measarray[3];
 			flag_measarray[3] = flag_measarray[4];
-			flag_measarray[4] = (((double) (size_wheel/(time_measarray[4]-time_measarray[3]))) >= speed_threshold)
-			
+			if ( (time_measarray[4]-time_measarray[3]) > 0 ) //prevent divide by 0 errors
+			{
+				flag_measarray[4] = ((((double) size_wheel/((double) time_measarray[4]-(double) time_measarray[3]))) >= (double) speed_threshold)
+			}
+			else
+			{
+				flag_measarray[4] = 0;
+			}
+						
 			if (flag_measarray[0] && flag_measarray[1] && flag_measarray[2] && flag_measarray[3] && flag_measarray[4])
 			{
 				//differentiation based on method of central difference
@@ -146,7 +154,7 @@ int main (void)
 				
 				else
 				{
-					calc_power (speed_current , acc_current);
+					power_calc = calc_power (speed_current , acc_current);
 				}
 			}
 			
@@ -233,7 +241,7 @@ void store_table (double speed, double power) //to do: overflow check for speed 
 	uint8_t speed_int = 0;
 	uint8_t power_int = 0;
 	
-	speed = speed * (3.6 * 5) //convert speed from m/s to 0.5-km/h, 255 => 51 km/h
+	speed = speed * (3.6 * 5); //convert speed from m/s to 0.5-km/h, 255 => 51 km/h
 	speed_int = (int) speed;
 	power = 0.5 * power; //convert power from W to 2-W; 255 => 510 W
 	power_int = (int) power;
@@ -251,9 +259,37 @@ void store_table (double speed, double power) //to do: overflow check for speed 
 	}
 }
 
-void calc_power (double speed, double acceleration)
+double calc_power (double speed, double acceleration)
 {
+	double power_tot = 0;
+	double power_frict = 0;
+	double power_acc = 0;
+	uint8_t speed_int = 0;
+	uint8_t i = 0;
 	
+	speed_int = (int) (speed * 3.6 * 5);
+	
+	while (speed_int < speed_table[i])
+	{
+		i++;
+	}
+	
+	if (speed_int == speed_table[i])
+	{
+		power_frict = power_table[i];
+	}
+	
+	else
+	{
+		power_frict = (((double) power_table[i-1] - (double) power_table[i])/((double) speed_table[i-1] - (double) speed_table[i])) * ((double) speed_int - (double) speed_table[i]) + (double) power_table[i];
+		power_frict = power_frict * 2; //convert so that 255 => 510 W
+	}
+	
+	power_acc = mass_eff * speed * acceleration;
+	
+	power_tot = power_frict + power_acc;
+	
+	return power_tot;
 }
 
 void
